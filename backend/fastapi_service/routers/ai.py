@@ -17,21 +17,20 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 class ChatRequest(BaseModel):
     message: str
 
-@router.post("/{image_id}/redetect")
+@router.post("/{image_id}/rerun-detection")
 def redetect(image_id: int, db: Session = Depends(get_db)):
     img = db.query(Image).filter(Image.id == image_id).first()
     if not img:
         raise HTTPException(status_code=404, detail="Image not found")
         
     original_path = os.path.join(BASE_DIR, img.original_image_path.lstrip('/'))
-    processed_path = os.path.join(BASE_DIR, img.processed_image_path.lstrip('/'))
     
     # Clear old detections
     db.query(Detection).filter(Detection.image_id == image_id).delete()
     db.commit()
     
     # Process YOLO again
-    process_image_with_yolo(db, img, original_path, processed_path)
+    process_image_with_yolo(db, img, original_path)
     
     return {"status": "success"}
 
@@ -47,7 +46,7 @@ def get_caption(image_id: int, db: Session = Depends(get_db)):
         caption = generate_caption(original_path, img.detections)
         return {"caption": caption}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please try again")
 
 @router.get("/{image_id}/chat", response_model=List[ChatHistorySchema])
 def get_chat_history(image_id: int, db: Session = Depends(get_db)):
@@ -79,4 +78,4 @@ def chat(image_id: int, request: ChatRequest, db: Session = Depends(get_db)):
         
         return {"answer": answer}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=503, detail="AI service temporarily unavailable, please try again")

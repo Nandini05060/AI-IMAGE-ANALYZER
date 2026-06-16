@@ -38,8 +38,6 @@ def upload_image(
         
     filename = file.filename
     original_path = os.path.join(MEDIA_UPLOADS, filename)
-    processed_filename = f"processed_{filename}"
-    processed_path = os.path.join(MEDIA_PROCESSED, processed_filename)
     
     with open(original_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -48,15 +46,14 @@ def upload_image(
     db_img = Image(
         title=title or filename.split('.')[0],
         description=description,
-        original_image_path=f"/media/uploads/{filename}",
-        processed_image_path=f"/media/processed/{processed_filename}"
+        original_image_path=f"/media/uploads/{filename}"
     )
     db.add(db_img)
     db.commit()
     db.refresh(db_img)
     
     # Process YOLO
-    process_image_with_yolo(db, db_img, original_path, processed_path)
+    process_image_with_yolo(db, db_img, original_path)
     
     db.refresh(db_img)
     return db_img
@@ -67,27 +64,23 @@ def delete_image(image_id: int, db: Session = Depends(get_db)):
     if not img:
         raise HTTPException(status_code=404, detail="Image not found")
         
-    # Delete files
+    # Delete file
     original_full_path = os.path.join(BASE_DIR, img.original_image_path.lstrip('/'))
-    processed_full_path = os.path.join(BASE_DIR, img.processed_image_path.lstrip('/')) if img.processed_image_path else ""
-    
     if os.path.exists(original_full_path):
         os.remove(original_full_path)
-    if processed_full_path and os.path.exists(processed_full_path):
-        os.remove(processed_full_path)
         
     db.delete(img)
     db.commit()
     return {"status": "success"}
 
-@router.put("/{image_id}", response_model=ImageSchema)
+@router.patch("/{image_id}", response_model=ImageSchema)
 def update_image(
     image_id: int,
     title: str = Form(None),
     description: str = Form(None),
-    file: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
+    """Update title/notes of an image."""
     img = db.query(Image).filter(Image.id == image_id).first()
     if not img:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -97,28 +90,39 @@ def update_image(
     if description is not None:
         img.description = description
         
-    if file:
-        if not file.content_type.startswith("image/"):
-            raise HTTPException(status_code=400, detail="File must be an image")
-            
-        filename = file.filename
-        original_path = os.path.join(MEDIA_UPLOADS, filename)
-        processed_filename = f"processed_{filename}"
-        processed_path = os.path.join(MEDIA_PROCESSED, processed_filename)
+    db.commit()
+    db.refresh(img)
+    return img
+
+@router.put("/{image_id}/replace", response_model=ImageSchema)
+def replace_image(
+    image_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Replace image file and rerun detection."""
+    img = db.query(Image).filter(Image.id == image_id).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="Image not found")
         
-        with open(original_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        img.original_image_path = f"/media/uploads/{filename}"
-        img.processed_image_path = f"/media/processed/{processed_filename}"
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
         
-        # Clear old detections
-        db.query(Detection).filter(Detection.image_id == image_id).delete()
-        db.commit()
+    filename = file.filename
+    original_path = os.path.join(MEDIA_UPLOADS, filename)
+    
+    with open(original_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
         
-        # Process YOLO again
-        process_image_with_yolo(db, img, original_path, processed_path)
-        
+    img.original_image_path = f"/media/uploads/{filename}"
+    
+    # Clear old detections
+    db.query(Detection).filter(Detection.image_id == image_id).delete()
+    db.commit()
+    
+    # Process YOLO again
+    process_image_with_yolo(db, img, original_path)
+    
     db.commit()
     db.refresh(img)
     return img
