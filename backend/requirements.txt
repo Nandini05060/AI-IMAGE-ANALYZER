@@ -1,0 +1,10 @@
+django
+djangorestframework
+fastapi
+uvicorn
+python-multipart
+sqlalchemy
+ultralytics
+google-generativeai
+pillow
+python-dotenv
