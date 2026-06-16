@@ -84,6 +84,6 @@ The API documentation can be viewed at `http://localhost:8001/docs`.
 
 ## Screenshots/GIF of the working app
 
-*(Add screenshots or a GIF demonstrating the upload process, YOLO object detection bounding boxes, and the Gemini chat interface here.)*
+![App Screenshot](./screenshot.png)
 
 ---

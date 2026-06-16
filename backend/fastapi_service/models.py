@@ -11,6 +11,7 @@ class Image(Base):
     description = Column(Text)
     original_image_path = Column(String(500))
     processed_image_path = Column(String(500), nullable=True)
+    processing_status = Column(String(50), default="pending")
     upload_timestamp = Column(DateTime, default=datetime.utcnow)
 
     detections = relationship("Detection", back_populates="image", cascade="all, delete-orphan")

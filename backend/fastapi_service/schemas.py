@@ -37,6 +37,7 @@ class Image(ImageBase):
     id: int
     original_image_path: str
     processed_image_path: Optional[str] = None
+    processing_status: str
     upload_timestamp: datetime
     detections: List[Detection] = []
     chat_history: List[ChatHistory] = []

@@ -35,15 +35,27 @@ const ImageDetails = () => {
   const fetchImageDetails = async () => {
     try {
       const response = await axios.get(`${API_BASE}/images/${id}`);
-      setImage(response.data);
-      setEditTitle(response.data.title || '');
-      setEditDesc(response.data.description || '');
+      const imgData = response.data;
+      setImage(imgData);
+      
+      // Initialize edit states if not editing
+      if (!isEditing) {
+        setEditTitle(imgData.title || '');
+        setEditDesc(imgData.description || '');
+      }
+      
+      // If still processing, poll again in 2 seconds
+      if (imgData.processing_status === 'pending') {
+        setTimeout(fetchImageDetails, 2000);
+      } else {
+        setLoading(false);
+      }
+      
     } catch (error) {
       console.error('Error fetching details:', error);
       if (error.response?.status === 404) {
         navigate('/');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -70,10 +82,12 @@ const ImageDetails = () => {
     setIsRedetecting(true);
     try {
       await axios.post(`${API_BASE}/images/${id}/rerun-detection`);
-      await fetchImageDetails(); // Reload to get new detections
+      setCaption(null);
+      await fetchImageDetails(); // Reload to get pending state and start polling
     } catch (error) {
       console.error('Error redetecting:', error);
-      alert('Failed to re-run detection.');
+      const errorMsg = error.response?.data?.detail || error.message || 'Unknown error';
+      alert(`Failed to re-run detection: ${errorMsg}`);
     } finally {
       setIsRedetecting(false);
     }
@@ -125,8 +139,11 @@ const ImageDetails = () => {
     }
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="loading-spinner primary"></div></div>;
+  // If initial load hasn't finished (no image object)
+  if (loading && !image) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="loading-spinner primary"></div></div>;
   if (!image) return <div className="card">Image not found.</div>;
+  
+  const isPending = image.processing_status === 'pending';
 
   return (
     <div>
@@ -148,20 +165,22 @@ const ImageDetails = () => {
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             {/* Image and Bounding Boxes overlay */}
             <div style={{ position: 'relative', width: '100%', backgroundColor: 'var(--bg-color)', display: 'flex', justifyContent: 'center' }}>
-              {isReplacing && (
-                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div className="loading-spinner primary"></div>
+              {(isReplacing || isPending) && (
+                <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                  <div className="loading-spinner primary" style={{ width: '40px', height: '40px' }}></div>
+                  <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>{isReplacing ? 'Uploading...' : 'Analyzing Exact Objects...'}</h3>
+                  <p style={{ margin: 0, color: 'var(--text-muted)' }}>This takes a few seconds.</p>
                 </div>
               )}
               <img 
-                src={`http://localhost:8001${image.original_image_path}?t=${Date.now()}`} 
+                src={`http://localhost:8001${image.original_image_path}?t=${new Date(image.upload_timestamp).getTime()}`} 
                 alt={image.title} 
                 onLoad={handleImageLoad}
-                style={{ width: '100%', height: 'auto', display: 'block' }} 
+                style={{ width: '100%', height: 'auto', display: 'block', filter: isPending ? 'blur(2px)' : 'none' }} 
               />
               
               {/* Draw boxes natively via CSS */}
-              {image.detections?.map((det, idx) => {
+              {!isPending && image.detections?.map((det, idx) => {
                 const left = (det.bbox_xmin / imgDims.w) * 100;
                 const top = (det.bbox_ymin / imgDims.h) * 100;
                 const width = ((det.bbox_xmax - det.bbox_xmin) / imgDims.w) * 100;
@@ -195,59 +214,58 @@ const ImageDetails = () => {
                 );
               })}
             </div>
-
+            {/* Metadata Section */}
             <div style={{ padding: '1.5rem', borderTop: '1px solid var(--border-color)' }}>
-              
-              {/* Metadata Edit Section */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ margin: 0 }}>Image Metadata</h3>
-                  {!isEditing ? (
-                    <button onClick={() => setIsEditing(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem' }}>
-                      <Edit2 size={14} /> Edit
-                    </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => setIsEditing(false)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem' }}>
-                        <X size={14} /> Cancel
-                      </button>
-                      <button onClick={saveMetadata} className="btn btn-primary" style={{ padding: '0.4rem 0.8rem' }} disabled={isSaving}>
-                        {isSaving ? 'Saving...' : <><Save size={14} /> Save</>}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {isEditing ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <input 
-                      type="text" 
-                      value={editTitle} 
-                      onChange={(e) => setEditTitle(e.target.value)} 
-                      placeholder="Title" 
-                      style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                    />
-                    <textarea 
-                      value={editDesc} 
-                      onChange={(e) => setEditDesc(e.target.value)} 
-                      placeholder="Description (Optional)" 
-                      rows={2}
-                      style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', resize: 'vertical' }}
-                    />
-                  </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Details</h3>
+                {!isEditing ? (
+                  <button onClick={() => setIsEditing(true)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>
+                    <Edit2 size={14} /> Edit
+                  </button>
                 ) : (
-                  <div>
-                    {image.description ? <p style={{ margin: 0, color: 'var(--text-muted)' }}>{image.description}</p> : <p style={{ margin: 0, color: '#94a3b8', fontStyle: 'italic' }}>No description provided.</p>}
-                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                      Uploaded: {new Date(image.upload_timestamp).toLocaleString()}
-                    </p>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={() => setIsEditing(false)} className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>
+                      <X size={14} /> Cancel
+                    </button>
+                    <button onClick={saveMetadata} disabled={isSaving} className="btn btn-primary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>
+                      <Save size={14} /> {isSaving ? 'Saving...' : 'Save'}
+                    </button>
                   </div>
                 )}
               </div>
 
+              {isEditing ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Title</label>
+                    <input 
+                      type="text" 
+                      value={editTitle} 
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <label style={{ fontSize: '0.875rem', fontWeight: 500 }}>Description</label>
+                    <textarea 
+                      value={editDesc} 
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      rows={3}
+                      style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', resize: 'vertical' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {image.description ? <p style={{ margin: 0, color: 'var(--text-muted)' }}>{image.description}</p> : <p style={{ margin: 0, color: '#94a3b8', fontStyle: 'italic' }}>No description provided.</p>}
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                    Uploaded: {new Date(image.upload_timestamp).toLocaleString()}
+                  </p>
+                </div>
+              )}
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-                <button onClick={reDetect} className="btn btn-outline" disabled={isRedetecting} style={{ flex: 1, justifyContent: 'center' }}>
+                <button onClick={reDetect} className="btn btn-outline" disabled={isRedetecting || isPending} style={{ flex: 1, justifyContent: 'center' }}>
                   <RefreshCw size={16} className={isRedetecting ? 'spin' : ''} /> 
                   {isRedetecting ? 'Detecting...' : 'Re-run Detection'}
                 </button>
@@ -258,8 +276,9 @@ const ImageDetails = () => {
                   onChange={handleReplaceImage} 
                   accept="image/*" 
                   style={{ display: 'none' }} 
+                  disabled={isPending}
                 />
-                <button onClick={() => fileInputRef.current?.click()} className="btn btn-outline" disabled={isReplacing} style={{ flex: 1, justifyContent: 'center' }}>
+                <button onClick={() => fileInputRef.current?.click()} className="btn btn-outline" disabled={isReplacing || isPending} style={{ flex: 1, justifyContent: 'center' }}>
                   <Upload size={16} /> Replace Image
                 </button>
               </div>
@@ -275,7 +294,7 @@ const ImageDetails = () => {
               )}
 
               {!caption && (
-                <button onClick={generateCaption} className="btn btn-primary" style={{ marginTop: '1.5rem', width: '100%', justifyContent: 'center' }} disabled={isGeneratingCaption}>
+                <button onClick={generateCaption} className="btn btn-primary" style={{ marginTop: '1.5rem', width: '100%', justifyContent: 'center' }} disabled={isGeneratingCaption || isPending}>
                   {isGeneratingCaption ? <><span className="loading-spinner"></span> Generating...</> : <><FileText size={16} /> Generate Caption</>}
                 </button>
               )}
@@ -319,7 +338,7 @@ const ImageDetails = () => {
         </div>
 
         <div>
-          <ChatPanel imageId={id} />
+          <ChatPanel imageId={id} disabled={isPending} />
         </div>
       </div>
     </div>

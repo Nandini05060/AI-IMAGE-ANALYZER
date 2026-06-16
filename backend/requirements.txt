@@ -8,3 +8,4 @@ ultralytics
 google-generativeai
 pillow
 python-dotenv
+git+https://github.com/openai/CLIP.git

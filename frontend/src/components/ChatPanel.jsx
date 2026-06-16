@@ -4,7 +4,7 @@ import { Send, Bot, User } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8001/api';
 
-const ChatPanel = ({ imageId }) => {
+const ChatPanel = ({ imageId, disabled }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ const ChatPanel = ({ imageId }) => {
 
   const sendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || disabled) return;
 
     const userMsg = { role: 'user', message: input, tempId: Date.now() };
     setMessages(prev => [...prev, userMsg]);
@@ -98,10 +98,10 @@ const ChatPanel = ({ imageId }) => {
           type="text" 
           value={input} 
           onChange={(e) => setInput(e.target.value)} 
-          placeholder="Ask a question about the image..."
-          disabled={isLoading}
+          placeholder={disabled ? "AI is analyzing image..." : "Ask a question about the image..."}
+          disabled={isLoading || disabled}
         />
-        <button type="submit" className="btn btn-primary" disabled={isLoading || !input.trim()}>
+        <button type="submit" className="btn btn-primary" disabled={isLoading || disabled || !input.trim()}>
           <Send size={18} />
         </button>
       </form>

@@ -12,7 +12,7 @@ function App() {
         <header className="header">
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary-color)' }}>
             <Camera size={32} />
-            <h1>AI Vision Hub</h1>
+            <h1>AI Image Object Detection &amp; Captioning</h1>
           </Link>
           <nav>
             <Link to="/upload" className="btn btn-primary">
