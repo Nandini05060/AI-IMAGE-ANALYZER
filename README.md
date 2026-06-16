@@ -84,6 +84,8 @@ The API documentation can be viewed at `http://localhost:8001/docs`.
 
 ## Screenshots/GIF of the working app
 
-![App Screenshot](./screenshot.png)
+![App Screenshot 1](./screenshot.png)
+
+![App Screenshot 2](./screenshot2.png)
 
 ---
