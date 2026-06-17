@@ -8,6 +8,8 @@ A full-stack web application that allows users to upload images, automatically d
 - **Chat / Captioning**: Request AI-generated captions or ask follow-up questions about the image using the Gemini API. Chat history is maintained.
 - **Full CRUD on Images**: Create, Read, Update, and Delete images alongside their metadata, detections, and chat history.
 - **Architecture**: React + Vite (Frontend) and Django + FastAPI (Backend).
+- **Verification**: Fully verified and tested on June 17, 2026. Both YOLO-World model inference and Gemini 2.5 Flash captioning/chatting are fully operational with the active API key.
+
 
 ## Environment Variables Needed
 
